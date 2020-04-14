@@ -17,7 +17,7 @@ library(infer)
 library(skimr)
 library(gganimate)
 library(rpart.plot)
-library(tidymodels)
+#library(tidymodels)
 library(tidyverse)
 
 nes <- read_rds("ch13_nes.rds")
@@ -46,6 +46,17 @@ Draw a regression line through this jittered data using `geom_smooth()`.
 Discuss whether a linear regression is appropriate for this. Is there a possibility of model predicting greater than 1 or less than 0 probability for `dvote`?
 
 
+```{r}
+
+skim(nes)
+
+ggplot(nes, aes(x = income, y = dvote)) +
+  geom_jitter(alpha = 0.4, height = 0.25) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Ideology", y = "Preference for Democratic Candidate")
+
+```
+
 # Scene 2
 
 **Prompt:** Let's fit a logistic regression model in which `dvote` is the dependent variable and `gender` and `income` are the independent variables. Do not add an interaction term. Name the model `model_1`. As we’ll see, the syntax for running a logistic regression in R is very similar to that for running a linear regression. In fact, we’ll follow the same basic steps:
@@ -62,8 +73,17 @@ Explain to your non-mathematical boss the relationship between income and prefer
 
 Optional (very hard!): Interpret the `estimate` for (Intercept). What does it mean? Think back to how we interpreted regression intercepts in the last two weeks. You *might* need to use the `qlogis()` function.
 
+```{r}
+model_1 <- glm(dvote ~ gender + income, family = "binomial", data = nes) %>%
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high)
 
+```
+Estimates: being male correlates to 0.04 decrease in preference for democrats. For income, there is a 0.07 decrease in preference for democrats.
 
+Income (Bayes and Frequentist): Bayesion would be that there is 95% certainty that the true value of the treatment effect (b1), and Frequentist would be that in the long run (infinte samples), 95% of the time the true value will be contained within those intervals. 
+
+The more money you have, the more likely you are to vote for non-Democrat.
 
 # Scene 3
 
@@ -75,6 +95,10 @@ What does the `.fitted` column means?
 
 Why does `.fitted` have the same value for every male with income = 3? (First, show that this is in fact true. Then explain why?)
 
+```{r}
+model_1 %>%
+  augment(type.predict = "response")
+```
 
 
 # Scene 4
@@ -85,10 +109,26 @@ Use the `newdata` argument in `augment` on `model_1` to make estimates for new d
 
 Use `mutate` to create confidence intervals using `.fitted` and `2 * .se.fit`.
 
-Then use `ggplot` to plot the estimates with their confidence intervals. `geom_errorbar()` is a handy tool for that.
+Then use `ggplot` to plot the estimates with their confidence intervals. `geom_errorbar()` is a handy tool for that
 
 (Optional!) Is this estimate a could forecast of what such a person would actually do? Probably not! An individual can't vote 0.52. You can only either do 0 or do 1. There is no 0.52 option. This highlights the difference between the endlying (and never observable, even in theory) probability of voting, which is on a 0 to 1 scale, and the actual vote, which is only 0 or 1, never in between. With that as background, what do you predict that these two people will do? How can you get R to show this prediction? 
 
+```{r}
+avg_income <- nes %>%
+  summarise(avg_income = mean(income)) %>%
+  pull(avg_income)
+
+augment(
+  new_data = tibble(
+    gender = c("male", "female"),
+    income = rep(avg_income, 2)
+  ),
+  type.predict = "response"
+) %>%
+  mutate(
+    low = .fitted - 1.96 * .se.fit
+  )
+```
 
 
 # Scene 5
@@ -103,6 +143,13 @@ Then use `ggplot` to plot the estimates with their confidence intervals. `geom_e
 6. Look at the output dataframe to see if you understand the structure of it.
 7. Save the output as `multiple_reg`
 
+```{r}
+
+boot_strap = rep.sample_n(nes, replace = TRUE, size = nrow(nes), reps = 100)
+
+boot_strap %>%
+  group_by(replicate)
+```
 
 
 # Scene 6
@@ -134,5 +181,13 @@ Interpret the plot.
 
 **Prompt:** Replicate this graph: https://rpubs.com/Seeam2590/594856 
 
+```{r}
+nes %>%
+  group_by(year, gender) %>%
+  summarize(perc_dvote = mean(dvote),
+            emplogit = qlogis(perc_dvote)) %>%
+  ggplot(aes(x = year, y = emplogit)) +
+  geom_point()
+```
 
 
